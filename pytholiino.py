@@ -74,24 +74,35 @@ def read_commandline_args():
 	else:
 		print USAGE
 		return False
-	
 
 def init_connection():
 	return serial.Serial(SERIALDEV, SERIALSPEED, SERIALBITS)
 
+def get_sector_offset_from_aux(command_frame):
+	aux1 = ord(command_frame[2])
+        aux2 = ord(command_frame[3])
+        sector_number = (256 * aux2) + aux1 - 1 # make sector start from 0
+	print 'aux1 = ' + str(aux1) + ' aux2 = ' + str(aux2) + ' sector = ' + str(sector_number)
+        sector_offset = ATR_HEADER_LEN + (128 * sector_number)
+	return sector_offset
+
 def disk_get_status(command_frame):
-	print 'disk_get_status()'	
+	print 'disk_get_status()'
 
 def get_sector(port, imagefile, command_frame):
-	aux1 = ord(command_frame[2])
-	aux2 = ord(command_frame[3])
-	sector_number = (256 * aux2) + aux1 - 1 # make sector start from 0
-	print 'aux1 = ' + str(aux1) + ' aux2 = ' + str(aux2) + ' sector = ' + str(sector_number)
-	# should assert that sector < 720 even if Atariino should've done it?
-	sector_offset = ATR_HEADER_LEN + (128 * sector_number)
+	print 'get_sector'
+	sector_offset = get_sector_offset_from_aux(command_frame)
 	imagefile.seek(sector_offset)
 	sector_data = imagefile.read(SECTOR_LEN)
 	port.write(sector_data)
+
+def put_sector(port, imagefile, command_frame):
+	print 'put_sector'
+	sector_offset = get_sector_offset_from_aux(command_frame)
+	imagefile.seek(sector_offset)
+	sector_data = port.read(SECTOR_LEN)
+	imagefile.write(sector_data)
+	imagefile.flush() # probably overkill
 
 def handle_disk(port, imagefile, command_frame):
 	cmdid = ord(command_frame[1])
@@ -119,7 +130,8 @@ def eventloop(port, imagefile):
 
 def make_connection():
 	port = init_connection()
-	d1_file = file(ATRIMAGE, 'rwb')  #file(sys.argv[1])
+	d1_file = open(ATRIMAGE, 'rb+')
+	#file(sys.argv[1])
 
 	print port.readline()
 	print port.readline()
