@@ -1,5 +1,5 @@
 #
-# pytholiino - a program to serve sectors from .ATR file to Atariino.
+# pytholiino - a program to serve sectors from .ATR files to Atariino.
 #   usage: pytholiino <serial port> <.ATR file for D1> [<.ATR file for D2> ... <.ATR file for D15>]
 # no support for formatting a new disk from Atari yet
 # 0. read command line arguments, check that the listed files exists
@@ -8,9 +8,10 @@
 # 0.3. enumerate .ATR files - this is how many disk drives we support.
 # 1. open serial port, read line and assert it reads "Atariino".
 # 2. read line, which is the Atariino's versin number (for curiosity)
-# 2.1. write to Atariino, how many drives we support 1-15 (none, if printer?)
-# 2.2. read line and assert it reads "OK"
-# 3. enter event loop: 
+# -- not necessary if we support 15 disks. There are associated .ATR images or they are considered to have empty disks in.( 2.1. write to Atariino, how many drives we support 1-15 (none, if printer?))
+# -- not necessary (above) (2.2. read line and assert it reads "OK")
+# 2.3 we might need to tell Atariino, if we have write protected .ATRs.
+# 3. enter event loop:
 # 3.1. read command frame (4 bytes, DEVID, CMDID, AUX1, AUX2) (Atarino has validated checksum)
 # 3.2. check whether DEVID is a drive we support (should be!)
 # 3.3. check CMDID is STATUS, GET_SECTOR or PUT_SECTOR
@@ -26,7 +27,11 @@ USAGE = 'pytholiino <serial port> <.ATR for D1> [<.ATR for D2> [... <.ATR for D1
 SERIALDEV = '/dev/ttyACM0'
 SERIALSPEED = 115200
 SERIALBITS = 8
-ATRIMAGE = 'Koronis Rift.ATR'
+#ATRIMAGE = 'Koronis Rift.ATR'
+#ATRIMAGE = 'Mercenary - Escape from Targ _ Novagen Software.atr'
+#ATRIMAGE = 'Theatre Europe _ PSS.atr'
+#ATRIMAGE = 'xlpmax.atr'
+ATRIMAGE = '../images/A-Rogue.atr'
 COMMAND_FRAME_LEN = 4	# device id, command id, aux1, aux2
 ATR_HEADER_LEN = 16
 SECTOR_LEN = 128
@@ -36,9 +41,9 @@ HEX = 16
 DEVID_D1		= int('0x31', HEX)
 DEVID_P1		= int('0x40', HEX)
 
-DISK_GET_STATUS = int('0x53', HEX)
-DISK_GET_SECTOR = int('0x52', HEX)
-DISK_PUT_SECTOR = int('0x50', HEX)
+DISK_GET_STATUS 	= int('0x53', HEX)
+DISK_GET_SECTOR 	= int('0x52', HEX)
+DISK_PUT_SECTOR		= int('0x50', HEX)
 
 PRINTER_PRINT_LINE 	= int('0x57', HEX)
 PRINTER_GET_STATUS 	= int('0x53', HEX)
