@@ -33,17 +33,20 @@ SECTOR_LEN = 128
 
 HEX = 16
 
-DEVID_D1	= int('0x31', HEX)
-DEVID_P1	= int('0x40', HEX)
+DEVID_D1		= int('0x31', HEX)
+DEVID_P1		= int('0x40', HEX)
 
 DISK_GET_STATUS = int('0x53', HEX)
 DISK_GET_SECTOR = int('0x52', HEX)
 DISK_PUT_SECTOR = int('0x50', HEX)
 
-ACK		= int('0x41', HEX)
-NAK		= int('0x4E', HEX)
-COMPLETE	= int('0x43', HEX)
-ERR		= int('0x45', HEX)
+PRINTER_PRINT_LINE 	= int('0x57', HEX)
+PRINTER_GET_STATUS 	= int('0x53', HEX)
+
+ACK			= int('0x41', HEX)
+NAK			= int('0x4E', HEX)
+COMPLETE		= int('0x43', HEX)
+ERR			= int('0x45', HEX)
 
 config = dict(serialdev=SERIALDEV)	# default
 #disk_drives = ['d1', '
@@ -111,10 +114,23 @@ def handle_disk(port, imagefile, command_frame):
 	elif cmdid == DISK_GET_SECTOR:
 		get_sector(port, imagefile, command_frame)
 	elif cmdid == DISK_PUT_SECTOR:
-		put_sector(command_frame)
+		put_sector(port, imagefile, command_frame)
+
+def printer_get_status(command_frame):
+	print 'printer_get_status'
+
+def print_line(port, command_frame):
+	print 'print_line'
+	aux2 = ord(command_frame[3])	# print mode, expect 0x4E -> 40 bytes frame (+ chksum)
+	line_data = port.read(NORMAL_LINE)
+	print line_data
 
 def handle_printer(command_frame):
 	cmdid = ord(command_frame[1])
+	if cmdid == PRINTER_PRINT_LINE:
+		print_line(port, command_frame)
+	elif cmdid == PRINTER_GET_STATUS:
+		printer_get_status(command_frame)
 	# handle status, write and write with verify
 
 def eventloop(port, imagefile):
