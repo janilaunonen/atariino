@@ -35,6 +35,7 @@ ATRIMAGE = '../images/A-Rogue.atr'
 COMMAND_FRAME_LEN = 4	# device id, command id, aux1, aux2
 ATR_HEADER_LEN = 16
 SECTOR_LEN = 128
+PRINTER_LINE_LEN = 40
 
 HEX = 16
 
@@ -48,6 +49,16 @@ DISK_PUT_SECTOR		= int('0x50', HEX)
 PRINTER_PRINT_LINE 	= int('0x57', HEX)
 PRINTER_GET_STATUS 	= int('0x53', HEX)
 
+# Atariino - Pytholiino custom debug command ids not part of SIO specification
+# The command frame will contain DEVID_P1 and one of following CMDIDs and
+# AUX1 will contain the length of debug text or binary blob in bytes.
+# Data frame will contain the debug text or binary blob without chksum.
+# Text length will include terminating 0. To reduce memory consumption in
+# ATMega, one cmd frame can be followd by several data frames as long as
+# the total amount of data equals the AUX1 field.
+PRINTER_DEBUG_TXT	= int('0xEE', HEX) # data frame will contain ASCII
+PRINTER_DEBUG_BIN       = int('0xFF', HEX) # data frame will contain binary
+
 ACK			= int('0x41', HEX)
 NAK			= int('0x4E', HEX)
 COMPLETE		= int('0x43', HEX)
@@ -60,7 +71,7 @@ config = dict(serialdev=SERIALDEV)	# default
 	# check extension
 	# check it exists
 	# check it can be opened
-	
+
 def is_serialdev_file(arg):
 	return os.file.isatty(arg)
 
@@ -86,6 +97,9 @@ def read_commandline_args():
 def init_connection():
 	return serial.Serial(SERIALDEV, SERIALSPEED, SERIALBITS)
 
+#
+# Disk operations
+#
 def get_sector_offset_from_aux(command_frame):
 	aux1 = ord(command_frame[2])
         aux2 = ord(command_frame[3])
@@ -112,6 +126,7 @@ def put_sector(port, imagefile, command_frame):
 	imagefile.write(sector_data)
 	imagefile.flush() # probably overkill
 
+# print command dispatcher
 def handle_disk(port, imagefile, command_frame):
 	cmdid = ord(command_frame[1])
 	if cmdid == DISK_GET_STATUS:
@@ -121,35 +136,60 @@ def handle_disk(port, imagefile, command_frame):
 	elif cmdid == DISK_PUT_SECTOR:
 		put_sector(port, imagefile, command_frame)
 
+#
+# Print operations (both Atari printer P: and Atariino debug)
+#
 def printer_get_status(command_frame):
-	print 'printer_get_status'
+	print '>>printer_get_status'
 
 def print_line(port, command_frame):
-	print 'print_line'
 	aux2 = ord(command_frame[3])	# print mode, expect 0x4E -> 40 bytes frame (+ chksum)
-	line_data = port.read(NORMAL_LINE)
-	print line_data
+	line_data = port.read(PRINTER_LINE_LEN)
+	print '*print_line>>' + line_data + '<<'
 
-def handle_printer(command_frame):
+def print_debug_txt(port, command_frame):
+	aux1 = ord(command_frame[2])	# lenght of txt in bytes including terminating 0
+	debug_txt = port.read(aux1)
+	print '*print_debug_txt>>' + debug_txt + '<<'
+
+def print_debug_bin(port, command_frame):
+	aux1 = ord(command_frame[2])
+	debug_bin = port.read(aux1)
+	print '*print_debug_bin>>' + ":".join("{:02x}".format(ord(c)) for c in debug_bin) + '<<'
+
+# print command dispatcher
+def handle_printer(port, command_frame):
 	cmdid = ord(command_frame[1])
 	if cmdid == PRINTER_PRINT_LINE:
 		print_line(port, command_frame)
 	elif cmdid == PRINTER_GET_STATUS:
 		printer_get_status(command_frame)
+	elif cmdid == PRINTER_DEBUG_TXT:
+		print_debug_txt(port, command_frame)
+	elif cmdid == PRINTER_DEBUG_BIN:
+		print_debug_bin(port, command_frame)
 	# handle status, write and write with verify
 
+# TODO: need to have connection reinitialization - close, reopen?
+# at least error detection, when connection is lost
 def eventloop(port, imagefile):
-	while True:
-		command_frame = port.read(COMMAND_FRAME_LEN)
-		devid = ord(command_frame[0])
-		if devid == DEVID_D1:
-			handle_disk(port, imagefile, command_frame)
-		elif devid == DEVID_P1:
-			handle_printer(port, command_frame)
-		else:
-			print 'Unknown device (devid)' + hex(devid)
+	try:
+		while True:
+			command_frame = port.read(COMMAND_FRAME_LEN)
+			devid = ord(command_frame[0])
+			if devid == DEVID_D1:
+				handle_disk(port, imagefile, command_frame)
+			elif devid == DEVID_P1:
+				handle_printer(port, command_frame)
+			else:
+				print '>>Unknown device (devid)' + hex(devid)
+				print '>>Whole command frame: ' + command_frame
+	except serial.SerialException:
+		print 'Lost connection to Atariino'
 
 def make_connection():
+
+	#TODO: reiterate init_connection() and enter eventloop()
 	port = init_connection()
 	d1_file = open(ATRIMAGE, 'rb+')
 	#file(sys.argv[1])
@@ -163,11 +203,10 @@ def make_connection():
 
 	eventloop(port, d1_file)
 
-	
 def main():
 	#if read_commandline_args():
 	make_connection()
-	
+
 if __name__ == '__main__':
 	main()
 
