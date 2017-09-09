@@ -1,11 +1,10 @@
 /*
 
  */
-#define SECTOR_LEN    			(128u)
-#define CMD_FRAME_LEN 			(4u)		  // 4 bytes + checksum byte.
+#define SECTOR_LEN                      (128u)
+#define CMD_FRAME_LEN                   (4u)		  // 4 bytes + checksum byte.
 #define PRINTER_FRAME_LEN		(40u)
 
-static byte ATR_HEADER_LEN		 = 16u;           // .ATR-file has 16 byte header.
 static byte sio_buffer[SECTOR_LEN + 1]	 = {0};           // extra space for checksum byte
 
 static const byte ACK			 = 0x41;          // 'A' in ATASCII
@@ -25,7 +24,7 @@ static const unsigned int CMD_FRAME_TIMEOUT_MS = 3u;      // 5 bytes in 19200bps
 static const unsigned int PRINTER_FRAME_LEN_MS = 17u;     // 41 bytes in 19200bps ~ 17ms
 
 static const byte NUM_OF_DISKS                = 0xFu;
-static const byte DEVID_D1                    = 0x31u; 	  // we're D1! We consider...
+static const byte DEVID_D1                    = 0x31u;    // we're D1! We consider...
 static const byte DEVID_D15		      = 0x3Fu;    // 0x31...0x3F to be disk drives
 static const byte DEVID_P1                    = 0x40u;
 
@@ -41,6 +40,16 @@ static const byte SIO_PRINT_AUX2_NORMAL       = 0x4Eu;
 static const byte SIO_PRINT_AUX2_SIDEWAYS     = 0x53u;
 static const byte SIO_PRINT_AUX2_DOUBLEWIDTH  = 0x44u;
 
+// Atariino - Pytholiino custom debug command ids not part of SIO specification
+// The command frame will contain DEVID_P1 and one of following CMDIDs and
+// AUX1 will contain the length of debug text or binary blob in bytes.
+// Data frame will contain the debug text or binary blob without chksum.
+// Text length will include terminating 0. To reduce memory consumption in
+// ATMega, one cmd frame can be followd by several data frames as long as
+// the total amount of data equals the AUX1 field.
+static const byte DBG_PRINTER_DEBUG_TXT	      = 0xEEu;	// data frame will contain ASCII
+static const byte DBG_PRINTER_DEBUG_BIN       = 0xFFu;	// data frame will contain binary
+
 static const byte DISK_SF_INV_CMD_FRAME       = (1u << 0u);
 static const byte DISK_SF_INV_DATA_FRAME      = (1u << 1u);
 static const byte DISK_SF_UNSUCCESSFUL_OP     = (1u << 2u);
@@ -54,7 +63,11 @@ struct disk_status_s {
   byte timeout_msb;
 };
 typedef struct disk_status_s disk_status_t;
-static disk_status_t disk_status[NUM_OF_DISKS] = {{.flags = 0x00u, .hw_flags = 0x00u, .timeout_lsb = 1u, .timeout_msb = 0x00u}}; // initialisation could be wrong
+static disk_status_t disk_status[NUM_OF_DISKS] = 
+	{{.flags = 0x00u,
+	  .hw_flags = 0x00u,
+	  .timeout_lsb = 1u,
+	  .timeout_msb = 0x00u}}; // initialisation could be wrong
 
 static const byte PRINTER_SF_INV_CMD_FRAME    = (1u << 0u);
 static const byte PRINTER_SF_INV_DATA_FRAME   = (1u << 1u);
@@ -66,7 +79,11 @@ struct printer_status_s {
   byte resv;
 };
 typedef struct printer_status_s printer_status_t;
-static printer_status_t printer_status = {.flags = 0x00u, .prev_aux2 = 0x00u, .timeout = 0x05u, .resv = 0x00u};
+static printer_status_t printer_status = 
+	{.flags = 0x00u,
+	 .prev_aux2 = 0x00u,
+	 .timeout = 0x05u,
+	 .resv = 0x00u};
 
 
 void setup() {
@@ -78,7 +95,7 @@ void setup() {
   }
   Serial.println("Atariino");
   Serial.println("V0.90");
-  // byte number_of_disks = Serial.read();
+  // byte number_of_disks = Serial.read(); // TODO: read number of disk drives!
 }
 
 
@@ -128,7 +145,7 @@ static const bool check_printer_frame(void)
 static const bool receive_printer_frame(void) 
 {
   Serial1.setTimeout(T3 + PRINTER_FRAME_LEN_MS);
-  const byte bytes_read = Serial1.readBytes(&sio_buffer[0u], PRINTER_FRAME_LEN + 1u);
+  const byte bytes_read = Serial1.readBytes((char*)&sio_buffer[0u], PRINTER_FRAME_LEN + 1u);
   if (bytes_read == PRINTER_FRAME_LEN + 1u) {
     return true;
   } else {
@@ -143,10 +160,31 @@ static void print_frame(/* TODO: params */ void)
 }
 
 
+static void dbg_print_bin(const byte *const buffer, const byte len)
+{
+  Serial.write(DEVID_P1);
+  Serial.write(DBG_PRINTER_DEBUG_BIN);
+  Serial.write((byte)len);
+  Serial.write((byte)0x00u);
+  Serial.write(&sio_buffer[0u], len);
+}
+
+
+// supports now strings less than 255 chars in length
+static void dbg_print_txt(const String& string)
+{
+  Serial.write(DEVID_P1);
+  Serial.write(DBG_PRINTER_DEBUG_TXT);
+  Serial.write((byte)string.length());
+  Serial.write((byte)0x00u);
+  Serial.print(string);
+}
+
+
 static const bool receive_sector(void)
 {
   Serial1.setTimeout(T3 + DATA_FRAME_LEN_MS);
-  const byte bytes_read = Serial1.readBytes(&sio_buffer[0u], SECTOR_LEN + 1u);
+  const byte bytes_read = Serial1.readBytes((char*)&sio_buffer[0u], SECTOR_LEN + 1u);
   if (bytes_read == SECTOR_LEN + 1u) {
     return true;
   } else {
@@ -173,7 +211,7 @@ static const bool send_sector(void)
 
 static const bool send_disk_status_frame(void)
 {
-  return send_frame((byte*)&disk_status, sizeof(disk_status));
+  return send_frame((byte*)&disk_status[0u], sizeof(disk_status_t));	// TODO: parameter in: disk # that selects the disk_status struct
 }
 
 static const bool send_printer_status_frame(void)
@@ -184,30 +222,30 @@ static const bool send_printer_status_frame(void)
 static void send_ack(void)
 {
   Serial1.write(ACK);
-//  Serial.println('A');
+//  Serial.println("DBG: \'A\'");
 }
 
 static void send_nak(void)
 {
   Serial1.write(NAK);
-//  Serial.println('N');
+//  Serial.println("DBG: \'N\'");
 }
 
-static void send_err(void)
+static void send_error(void)
 {
   Serial1.write(ERR);
-//  Serial.println('E');
+//  Serial.println("DBG: \'E\'");
 }
 
 static void send_complete(void)
 {
   Serial1.write(COMPLETE);
-//  Serial.println('C');
+//  Serial.println("DBG: \'C\'");
 }
 
 static void clear_disk_status_flags(void)
 {
-  disk_status.flags = DISK_SF_MOTOR_ON;
+  disk_status[0].flags = DISK_SF_MOTOR_ON;	// TODO: parameter in: disk #
 }
 
 static void clear_printer_status_flags(void)
@@ -222,9 +260,9 @@ static void set_printer_aux2(const byte aux2)
 
 static const bool is_write_protected(void)
 {
-  return (DISK_SF_WRITE_PROT == disk_status.flags & DISK_SF_WRITE_PROT);
+  return (DISK_SF_WRITE_PROT == (disk_status[0].flags & DISK_SF_WRITE_PROT));
 }
-
+#if 0
 // This function is suggested by Nick Gammon (http://forum.arduino.cc/index.php?topic=151014.msg1134308#msg1134308)
 static void wait_tx_hw_empty(void)
 {
@@ -234,7 +272,7 @@ static void wait_tx_hw_empty(void)
   while (!(UCSR1A & (1 << TXC1)))
   {}                                // Wait for the transmission to complete
 }
-
+#endif
 
 static const unsigned int auxs_to_sector(const byte aux1, const byte aux2)
 {
@@ -244,9 +282,6 @@ static const unsigned int auxs_to_sector(const byte aux1, const byte aux2)
 
 static void t_delay(const unsigned int delay_ms)
 {
-//  Serial.print("Delay for ");
-//  Serial.print(delay_ms);
-//  Serial.println("ms");
   //  wait_tx_hw_empty();
   delay(delay_ms);
 }
@@ -254,15 +289,18 @@ static void t_delay(const unsigned int delay_ms)
 static void parse_printer_command(const byte cmdid, const byte aux1, const byte aux2) {
   t_delay(T2);
   switch (cmdid) {
-    case SIO_PRINTER_GET_STATUS : // Serial.println("GET_STATUS (PRINTER)");
+    case SIO_PRINTER_GET_STATUS :
+dbg_print_txt(String("SIO_PRINTER_GET_STATUS --- ENTERED"));
       send_ack();
       t_delay(T5);
       send_complete();
       send_printer_status_frame();
       clear_printer_status_flags();
       set_printer_aux2(aux2);
+dbg_print_txt(String("SIO_PRINTER_GET_STATUS --- COMPLETE"));
       break;
     case SIO_PRINTER_PUT_LINE : // Serial.println("PRINT_LINE");
+dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- ENTERED"));
       switch(aux2) {
         case 0:
         case SIO_PRINT_AUX2_NORMAL :
@@ -272,17 +310,22 @@ static void parse_printer_command(const byte cmdid, const byte aux1, const byte 
           if(receive_printer_frame(/* TODO: there should be parameter */)) {
             if(check_printer_frame(/* TODO: there should be parameter */)) {
               send_ack();
+              Serial.write(DEVID_P1);
+              Serial.write(cmdid);
+              Serial.write(aux1);
+              Serial.write(aux2);
               print_frame();
               t_delay(T5);
               send_complete();
             } else {
-//              Serial.println("PRINT_LINE - CHECKSUM ERROR!");
+dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- CHECKSUM ERROR"));
               t_delay(T4);
               send_nak();
             }
           } else {
-//            Serial.println("PRINT_LINE - TIMEOUT!");
+dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- TIMEOUT"));
           }
+dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- COMPLETE"));
           break;
         default :
 //          Serial.print("PRINT_LINE - UNKNOWN AUX2 OPTION: ");
@@ -293,7 +336,7 @@ static void parse_printer_command(const byte cmdid, const byte aux1, const byte 
       set_printer_aux2(aux2);
       break;
     default : // REFACTORE WITH DISK 
-      Serial.print("UNKNOWN COMMAND_ID: ");
+      Serial.print("DBG: UNKNOWN COMMAND_ID: ");
       Serial.print(cmdid);
       Serial.print(" AUX1: ");
       Serial.print(aux1);
@@ -311,18 +354,23 @@ static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux
       t_delay(T2);
       send_ack();
       if (is_write_protected()) {
-        send_err();
+        send_error();
       } else {
         send_complete();   // TODO
       }
       break;
     case SIO_DISK_GET_STATUS :
+dbg_print_txt(String("SIO_DISK_GET_STATUS --- ENTERED"));
       t_delay(T2);
       send_ack();
+//dbg_print_txt(String("SENT ACK"));
       t_delay(T5);
       send_complete();
+//dbg_print_txt(String("SENT COMPLETE"));
       send_disk_status_frame();
+//dbg_print_txt(String("SENT DISK_STATUS_FRAME"));
       clear_disk_status_flags();
+dbg_print_txt(String("SIO_DISK_GET_STATUS --- COMPLETE"));
       break;
     case SIO_DISK_PUT_SECTOR :
       if (sector < SD_DISK_N_SECTORS) {
@@ -337,7 +385,7 @@ static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux
             Serial.write(cmdid);
             Serial.write(aux1);
             Serial.write(aux2);
-            Serial.writeBytes(&sio_buffer[0], SECTOR_LEN);
+            Serial.write(&sio_buffer[0], SECTOR_LEN);
             t_delay(5);
             if(Serial.read() == 'E') {
                send_error();
@@ -350,12 +398,13 @@ static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux
           }
         }
       } else {
-        disk_status.flags |= DISK_SF_INV_CMD_FRAME;
+        disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
         t_delay(T2);
         send_nak();
       }
       break;
     case SIO_DISK_GET_SECTOR :
+dbg_print_txt(String("SIO_DISK_GET_SECTOR --- ENTERED"));
       if (sector < SD_DISK_N_SECTORS) {
         t_delay(T2);
         send_ack();
@@ -366,26 +415,27 @@ static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux
         Serial.write(cmdid);
         Serial.write(aux1);
         Serial.write(aux2);
-        Serial.readBytes(&sio_buffer[0], SECTOR_LEN);
+        Serial.readBytes((char*)&sio_buffer[0], SECTOR_LEN);
         send_sector();
       } else {
-        disk_status.flags |= DISK_SF_INV_CMD_FRAME;
+        disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
         t_delay(T2);
         send_nak();
       }
+dbg_print_txt(String("SIO_DISK_GET_SECTOR --- COMPLETE"));
       break;
     case SIO_DISK_PUT_SECTOR_VERIFY : // Serial.print("PUT_SECTOR_VERIFY: "); Serial.println(sector);
       t_delay(T2);
       send_nak();
       break;           // TODO
     default :    // REFACTORE!
-      Serial.print("UNKNOWN COMMAND_ID: ");
+      Serial.print("DBG: UNKNOWN COMMAND_ID: ");
       Serial.print(cmdid);
       Serial.print(" AUX1: ");
       Serial.print(aux1);
       Serial.print(" AUX2: ");
       Serial.println(aux2);
-      disk_status.flags |= DISK_SF_INV_CMD_FRAME;
+      disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
       t_delay(T2);
       send_nak();
   }
@@ -404,7 +454,7 @@ static void parse_cmd_frame(void)
       case DEVID_D1 :
         parse_disk_command(cmdid, aux1, aux2);
         break;
-      case DEVID_P1 : Serial.println("PRINTER - I select you!");
+      case DEVID_P1 :
         parse_printer_command(cmdid, aux1, aux2);
         break;
       default : break;
@@ -420,19 +470,15 @@ static void parse_cmd_frame(void)
  */
 void serialEvent1() {
   Serial1.setTimeout(CMD_FRAME_TIMEOUT_MS);
-  byte read_bytes = Serial1.readBytes(&sio_buffer[0u], CMD_FRAME_LEN + 1u);
+  byte read_bytes = Serial1.readBytes((char*)&sio_buffer[0u], CMD_FRAME_LEN + 1u);
   if (read_bytes == CMD_FRAME_LEN + 1u) {
+    dbg_print_bin(&sio_buffer[0u], CMD_FRAME_LEN + 1u);
     parse_cmd_frame();
   } else {
     // report spurios data
-#if 0
-    Serial.print("DBG: Bytes received, but less than 5:");
-    for (byte i = 0u; i < read_bytes; i++) {
-      Serial.print(" 0x");
-      Serial.print(sio_buffer[i], HEX);
-    }
-    Serial.println();
-#endif
+    String debug_message("Spurious data follows");
+    dbg_print_txt(debug_message);
+    dbg_print_bin(&sio_buffer[0u], read_bytes);
   }
 }
 
