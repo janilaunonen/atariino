@@ -56,6 +56,8 @@ static const byte DISK_SF_UNSUCCESSFUL_OP     = (1u << 2u);
 static const byte DISK_SF_WRITE_PROT          = (1u << 3u);
 static const byte DISK_SF_MOTOR_ON            = (1u << 4u);
 
+static byte number_of_disks = 1u;
+
 struct disk_status_s {
   byte flags;       // see above
   byte hw_flags;    // ??
@@ -95,7 +97,10 @@ void setup() {
   }
   Serial.println("Atariino");
   Serial.println("V0.90");
-  // byte number_of_disks = Serial.read(); // TODO: read number of disk drives!
+
+  while(!Serial.available()) {
+  }
+  number_of_disks = Serial.read();
 }
 
 

@@ -31,7 +31,7 @@ SERIALBITS = 8
 #ATRIMAGE = 'Mercenary - Escape from Targ _ Novagen Software.atr'
 #ATRIMAGE = 'Theatre Europe _ PSS.atr'
 #ATRIMAGE = 'xlpmax.atr'
-ATRIMAGE = '../images/A-Rogue.atr'
+#ATRIMAGE = '../images/A-Rogue.atr'
 ATRIMAGES = ['../images/A-Rogue.atr', '../images/Great_American_Cross_Country_Road_Race_The_1985_Activision.atr', '../images/empty.atr']
 COMMAND_FRAME_LEN = 4	# device id, command id, aux1, aux2
 ATR_HEADER_LEN = 16
@@ -206,7 +206,13 @@ def make_connection():
 	# port.readline() == 'Atariino'
 	# port.readline() == 'OK'
 
+	# report number of ATR images we have to Atariino
+	number_of_images_bin = bytearray(1)
+	number_of_images_bin[0] = len(ATRIMAGES)
+	port.write(number_of_images_bin)
+
 	print 'Connected to Atariino, waiting in eventloop'
+	print 'Ready to serve ' + str(len(ATRIMAGES)) + ' ATR images'
 
 	eventloop(port, d1_file)
 
