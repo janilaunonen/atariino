@@ -369,50 +369,56 @@ static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux
 dbg_print_txt(String("SIO_DISK_GET_STATUS --- ENTERED"));
       t_delay(T2);
       send_ack();
-//dbg_print_txt(String("SENT ACK"));
       t_delay(T5);
       send_complete();
-//dbg_print_txt(String("SENT COMPLETE"));
       send_disk_status_frame();
-//dbg_print_txt(String("SENT DISK_STATUS_FRAME"));
       clear_disk_status_flags();
 dbg_print_txt(String("SIO_DISK_GET_STATUS --- COMPLETE"));
       break;
     case SIO_DISK_PUT_SECTOR :
+    case SIO_DISK_PUT_SECTOR_VERIFY :
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ENTERED"));
+      t_delay(T2);	// common T2 delay for ACK and NACK paths
       if (sector < SD_DISK_N_SECTORS) {
-        t_delay(T2);
         send_ack();
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ACK CMDFRM"));
         if (receive_sector()) {
           if(check_disk_frame()) {
             t_delay(T4);
             send_ack();
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ACK DATFRM"));
             //                          if not ok write_sector(sector, &buffer[0], SECTOR_LEN - 1);   ---> ERR! / otherwise COMPLETE
             Serial.write(DEVID_D1);
             Serial.write(cmdid);
             Serial.write(aux1);
             Serial.write(aux2);
             Serial.write(&sio_buffer[0], SECTOR_LEN);
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- DATA SENT"));
             t_delay(5);
             if(Serial.read() == 'E') {
                send_error();
-            } else {
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ERROR SENT"));
+
+            } else {			// assume we received 'C' -- TODO: make explicit test
               send_complete();
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- COMPLETE"));
             }
           } else {
             t_delay(T4);
             send_nak();
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- NACK"));
           }
         }
       } else {
         disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
-        t_delay(T2);
         send_nak();
       }
+dbg_print_txt(String("SIO_DISK_PUT_SECTOR --- COMPLETE"));
       break;
     case SIO_DISK_GET_SECTOR :
 dbg_print_txt(String("SIO_DISK_GET_SECTOR --- ENTERED"));
+      t_delay(T2);	// common T2 delay for ACK and NACK paths
       if (sector < SD_DISK_N_SECTORS) {
-        t_delay(T2);
         send_ack();
         t_delay(T5);
         send_complete();
@@ -425,15 +431,10 @@ dbg_print_txt(String("SIO_DISK_GET_SECTOR --- ENTERED"));
         send_sector();
       } else {
         disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
-        t_delay(T2);
         send_nak();
       }
 dbg_print_txt(String("SIO_DISK_GET_SECTOR --- COMPLETE"));
       break;
-    case SIO_DISK_PUT_SECTOR_VERIFY : // Serial.print("PUT_SECTOR_VERIFY: "); Serial.println(sector);
-      t_delay(T2);
-      send_nak();
-      break;           // TODO
     default :    // REFACTORE!
       Serial.print("DBG: UNKNOWN COMMAND_ID: ");
       Serial.print(cmdid);
