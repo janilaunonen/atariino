@@ -104,7 +104,7 @@ void loop() {
 }
 
 
-static const byte calculate_checksum(const byte *const buffer, const byte len)
+static byte calculate_checksum(const byte *const buffer, const byte len)
 {
   unsigned int chksum = 0x0000u;
   unsigned int mask_msb = 0xff00u;
@@ -121,28 +121,28 @@ static const byte calculate_checksum(const byte *const buffer, const byte len)
 }
 
 
-static const bool check_cmd_frame(void)
+static bool check_cmd_frame(void)
 {
   const byte frame_checksum = sio_buffer[CMD_FRAME_LEN];
   return (frame_checksum == calculate_checksum(&sio_buffer[0u], CMD_FRAME_LEN));
 }
 
 
-static const bool check_disk_frame(void)
+static bool check_disk_frame(void)
 {
   const byte frame_checksum = sio_buffer[SECTOR_LEN];
   return (frame_checksum == calculate_checksum(&sio_buffer[0u], SECTOR_LEN));
 }
 
 
-static const bool check_printer_frame(void)
+static bool check_printer_frame(void)
 {
   const byte frame_checksum = sio_buffer[PRINTER_FRAME_LEN];
   return (frame_checksum == calculate_checksum(&sio_buffer[0u], PRINTER_FRAME_LEN));
 }
 
 
-static const bool receive_printer_frame(void) 
+static bool receive_printer_frame(void)
 {
   Serial1.setTimeout(T3 + PRINTER_FRAME_LEN_MS);
   const byte bytes_read = Serial1.readBytes((char*)&sio_buffer[0u], PRINTER_FRAME_LEN + 1u);
@@ -181,7 +181,7 @@ static void dbg_print_txt(const String& string)
 }
 
 
-static const bool receive_sector(void)
+static bool receive_sector(void)
 {
   Serial1.setTimeout(T3 + DATA_FRAME_LEN_MS);
   const byte bytes_read = Serial1.readBytes((char*)&sio_buffer[0u], SECTOR_LEN + 1u);
@@ -193,7 +193,7 @@ static const bool receive_sector(void)
 }
 
 
-static const bool send_frame(const byte *const frame_addr, const byte len)
+static bool send_frame(const byte *const frame_addr, const byte len)
 {
   
   Serial1.write(frame_addr, len);
@@ -204,17 +204,17 @@ static const bool send_frame(const byte *const frame_addr, const byte len)
 }
 
 
-static const bool send_sector(void)
+static bool send_sector(void)
 {
   return send_frame(&sio_buffer[0], SECTOR_LEN);
 }
 
-static const bool send_disk_status_frame(void)
+static bool send_disk_status_frame(void)
 {
   return send_frame((byte*)&disk_status[0u], sizeof(disk_status_t));	// TODO: parameter in: disk # that selects the disk_status struct
 }
 
-static const bool send_printer_status_frame(void)
+static bool send_printer_status_frame(void)
 {
   return send_frame((byte*)&printer_status, sizeof(printer_status));
 }
@@ -258,7 +258,7 @@ static void set_printer_aux2(const byte aux2)
   printer_status.prev_aux2 = aux2;
 }
 
-static const bool is_write_protected(void)
+static bool is_write_protected(void)
 {
   return (DISK_SF_WRITE_PROT == (disk_status[0].flags & DISK_SF_WRITE_PROT));
 }
@@ -274,7 +274,7 @@ static void wait_tx_hw_empty(void)
 }
 #endif
 
-static const unsigned int auxs_to_sector(const byte aux1, const byte aux2)
+static unsigned int auxs_to_sector(const byte aux1, const byte aux2)
 {
   return (((unsigned int)aux2 << 8u) | (unsigned int)aux1);
 }
