@@ -32,6 +32,7 @@ SERIALBITS = 8
 #ATRIMAGE = 'Theatre Europe _ PSS.atr'
 #ATRIMAGE = 'xlpmax.atr'
 ATRIMAGE = '../images/A-Rogue.atr'
+ATRIMAGES = ['../images/A-Rogue.atr', '../images/Great_American_Cross_Country_Road_Race_The_1985_Activision.atr', '../images/empty.atr']
 COMMAND_FRAME_LEN = 4	# device id, command id, aux1, aux2
 ATR_HEADER_LEN = 16
 SECTOR_LEN = 128
@@ -45,6 +46,7 @@ DEVID_P1		= int('0x40', HEX)
 DISK_GET_STATUS 	= int('0x53', HEX)
 DISK_GET_SECTOR 	= int('0x52', HEX)
 DISK_PUT_SECTOR		= int('0x50', HEX)
+DISK_PUT_SECTOR_VERIFY	= int('0x57', HEX)
 
 PRINTER_PRINT_LINE 	= int('0x57', HEX)
 PRINTER_GET_STATUS 	= int('0x53', HEX)
@@ -123,17 +125,22 @@ def put_sector(port, imagefile, command_frame):
 	sector_offset = get_sector_offset_from_aux(command_frame)
 	imagefile.seek(sector_offset)
 	sector_data = port.read(SECTOR_LEN)
-	imagefile.write(sector_data)
-	imagefile.flush() # probably overkill
+	try:
+		imagefile.write(sector_data)
+		imagefile.flush()
+		port.write('C')	# COMPLETE)
+	except IOError:
+		port.write('E')	# ERROR)
 
-# print command dispatcher
 def handle_disk(port, imagefile, command_frame):
 	cmdid = ord(command_frame[1])
-	if cmdid == DISK_GET_STATUS:
+	if cmdid == DISK_GET_STATUS :
 		disk_get_status(command_frame)
-	elif cmdid == DISK_GET_SECTOR:
+	elif cmdid == DISK_GET_SECTOR :
 		get_sector(port, imagefile, command_frame)
-	elif cmdid == DISK_PUT_SECTOR:
+	elif cmdid == DISK_PUT_SECTOR :
+		put_sector(port, imagefile, command_frame)
+	elif cmdid == DISK_PUT_SECTOR_VERIFY :
 		put_sector(port, imagefile, command_frame)
 
 #
@@ -191,7 +198,7 @@ def make_connection():
 
 	#TODO: reiterate init_connection() and enter eventloop()
 	port = init_connection()
-	d1_file = open(ATRIMAGE, 'rb+')
+	d1_file = open(ATRIMAGES[0], 'rb+')
 	#file(sys.argv[1])
 
 	print port.readline()
