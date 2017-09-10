@@ -32,7 +32,7 @@ SERIALBITS = 8
 #ATRIMAGE = 'Theatre Europe _ PSS.atr'
 #ATRIMAGE = 'xlpmax.atr'
 #ATRIMAGE = '../images/A-Rogue.atr'
-ATRIMAGES = ['../images/A-Rogue.atr', '../images/Great_American_Cross_Country_Road_Race_The_1985_Activision.atr', '../images/empty.atr']
+ATRIMAGES = ['../images/A-Rogue.atr', '../images/Great_American_Cross_Country_Road_Race_The_1985_Activision.atr', '../images/empty2.atr']
 COMMAND_FRAME_LEN = 4	# device id, command id, aux1, aux2
 ATR_HEADER_LEN = 16
 SECTOR_LEN = 128
@@ -132,16 +132,19 @@ def put_sector(port, imagefile, command_frame):
 	except IOError:
 		port.write('E')	# ERROR)
 
-def handle_disk(port, imagefile, command_frame):
+def handle_disk(port, open_files, command_frame):
+	devid = ord(command_frame[0])
+	file_index = devid - DEVID_D1
 	cmdid = ord(command_frame[1])
+
 	if cmdid == DISK_GET_STATUS :
 		disk_get_status(command_frame)
 	elif cmdid == DISK_GET_SECTOR :
-		get_sector(port, imagefile, command_frame)
+		get_sector(port, open_files[file_index], command_frame)
 	elif cmdid == DISK_PUT_SECTOR :
-		put_sector(port, imagefile, command_frame)
+		put_sector(port, open_files[file_index], command_frame)
 	elif cmdid == DISK_PUT_SECTOR_VERIFY :
-		put_sector(port, imagefile, command_frame)
+		put_sector(port, open_files[file_index], command_frame)
 
 #
 # Print operations (both Atari printer P: and Atariino debug)
@@ -179,13 +182,13 @@ def handle_printer(port, command_frame):
 
 # TODO: need to have connection reinitialization - close, reopen?
 # at least error detection, when connection is lost
-def eventloop(port, imagefile):
+def eventloop(port, open_files) :
 	try:
 		while True:
 			command_frame = port.read(COMMAND_FRAME_LEN)
 			devid = ord(command_frame[0])
 			if devid == DEVID_D1:
-				handle_disk(port, imagefile, command_frame)
+				handle_disk(port, open_files, command_frame)
 			elif devid == DEVID_P1:
 				handle_printer(port, command_frame)
 			else:
@@ -198,7 +201,16 @@ def make_connection():
 
 	#TODO: reiterate init_connection() and enter eventloop()
 	port = init_connection()
-	d1_file = open(ATRIMAGES[0], 'rb+')
+
+	#devid = DEVID_D1
+	open_files = []
+	for image_file in ATRIMAGES:
+		try :
+			open_file = open(image_file, 'rb+')	# TODO: handle not found and wrong type files
+			open_files.append(open_file)
+		except IOError :
+			print 'unable to open file: ' + image_file
+
 	#file(sys.argv[1])
 
 	print port.readline()
@@ -208,13 +220,14 @@ def make_connection():
 
 	# report number of ATR images we have to Atariino
 	number_of_images_bin = bytearray(1)
-	number_of_images_bin[0] = len(ATRIMAGES)
+	number_of_images_bin[0] = len(open_files)
 	port.write(number_of_images_bin)
 
 	print 'Connected to Atariino, waiting in eventloop'
-	print 'Ready to serve ' + str(len(ATRIMAGES)) + ' ATR images'
+	print 'Ready to serve ' + str(len(open_files)) + ' ATR images'
+	print ATRIMAGES
 
-	eventloop(port, d1_file)
+	eventloop(port, open_files)
 
 def main():
 	#if read_commandline_args():
