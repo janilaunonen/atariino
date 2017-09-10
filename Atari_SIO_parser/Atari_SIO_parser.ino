@@ -23,7 +23,7 @@ static const unsigned int DATA_FRAME_LEN_MS    = 54u;     // 129 bytes in 19200b
 static const unsigned int CMD_FRAME_TIMEOUT_MS = 3u;      // 5 bytes in 19200bps ~ 2.08333...ms
 static const unsigned int PRINTER_FRAME_LEN_MS = 17u;     // 41 bytes in 19200bps ~ 17ms
 
-static const byte NUM_OF_DISKS                = 0xFu;
+static const byte MAX_NUM_OF_DISKS            = 0xFu;
 static const byte DEVID_D1                    = 0x31u;    // we're D1! We consider...
 static const byte DEVID_D15		      = 0x3Fu;    // 0x31...0x3F to be disk drives
 static const byte DEVID_P1                    = 0x40u;
@@ -63,7 +63,7 @@ struct disk_status_s {
   byte timeout_msb;
 };
 typedef struct disk_status_s disk_status_t;
-static disk_status_t disk_status[NUM_OF_DISKS] = 
+static disk_status_t disk_status[MAX_NUM_OF_DISKS] =
 	{{.flags = 0x00u,
 	  .hw_flags = 0x00u,
 	  .timeout_lsb = 1u,
