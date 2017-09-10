@@ -286,6 +286,9 @@ static void t_delay(const unsigned int delay_ms)
   delay(delay_ms);
 }
 
+//
+// PRINTER COMMANDS
+//
 static void parse_printer_command(const byte cmdid, const byte aux1, const byte aux2) {
   t_delay(T2);
   switch (cmdid) {
@@ -347,6 +350,9 @@ dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- COMPLETE"));
   }
 }
 
+//
+// DISK COMMANDS
+//
 static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux2) {
   const unsigned int sector = auxs_to_sector(aux1, aux2) - 1u;
   switch (cmdid) {
