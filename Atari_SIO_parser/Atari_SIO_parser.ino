@@ -461,15 +461,15 @@ static void parse_cmd_frame(void)
   const byte aux2   = sio_buffer[3u];
   const byte chksum = sio_buffer[4u];
 
+  const byte max_diskid = DEVID_D1 + number_of_disks - 1u;
+
   if (check_cmd_frame()) {
-    switch (devid) {
-      case DEVID_D1 :
+    if(DEVID_D1 <= devid && devid <= max_diskid) {
         parse_disk_command(cmdid, aux1, aux2);
-        break;
-      case DEVID_P1 :
+    } else if(DEVID_P1 == devid) {
         parse_printer_command(cmdid, aux1, aux2);
-        break;
-      default : break;
+    } else {
+      dbg_print_txt(String("PARSE_CMD_FRAME: unknown DEVID " + devid));
     }
   }
 }

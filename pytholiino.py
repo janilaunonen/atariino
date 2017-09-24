@@ -128,23 +128,29 @@ def put_sector(port, imagefile, command_frame):
 	try:
 		imagefile.write(sector_data)
 		imagefile.flush()
+		#C = bytearray(1)
+		# C[0] =
 		port.write('C')	# COMPLETE)
 	except IOError:
 		port.write('E')	# ERROR)
 
 def handle_disk(port, open_files, command_frame):
 	devid = ord(command_frame[0])
-	file_index = devid - DEVID_D1
+	image_file_index = devid - DEVID_D1
 	cmdid = ord(command_frame[1])
 
-	if cmdid == DISK_GET_STATUS :
-		disk_get_status(command_frame)
-	elif cmdid == DISK_GET_SECTOR :
-		get_sector(port, open_files[file_index], command_frame)
-	elif cmdid == DISK_PUT_SECTOR :
-		put_sector(port, open_files[file_index], command_frame)
-	elif cmdid == DISK_PUT_SECTOR_VERIFY :
-		put_sector(port, open_files[file_index], command_frame)
+	if image_file_index < len(open_files) :
+		if cmdid == DISK_GET_STATUS :
+			disk_get_status(command_frame)
+		elif cmdid == DISK_GET_SECTOR :
+			get_sector(port, open_files[image_file_index], command_frame)
+		elif cmdid == DISK_PUT_SECTOR :
+			put_sector(port, open_files[image_file_index], command_frame)
+		elif cmdid == DISK_PUT_SECTOR_VERIFY :
+			put_sector(port, open_files[image_file_index], command_frame)
+	else :
+		port.write('E')
+		print 'handle_disk --- device id out of range (#' + len(open_files) + ')'
 
 #
 # Print operations (both Atari printer P: and Atariino debug)
