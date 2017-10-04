@@ -109,6 +109,13 @@ void loop() {
 }
 
 
+// this function is expected to be called after parse_cmd_frame() which
+// validates devid to be in range [DEVID_D1, DEVID_D1 + number_of_disks[
+static inline byte devid_to_device_index(const byte devid)
+{
+  return (devid - DEVID_D1);
+}
+
 static byte calculate_checksum(const byte *const buffer, const byte len)
 {
   unsigned int chksum = 0x0000u;
@@ -214,9 +221,9 @@ static bool send_sector(void)
   return send_frame(&sio_buffer[0], SECTOR_LEN);
 }
 
-static bool send_disk_status_frame(void)
+static bool send_disk_status_frame(const byte device_index)
 {
-  return send_frame((byte*)&disk_status[0u], sizeof(disk_status_t));	// TODO: parameter in: disk # that selects the disk_status struct
+  return send_frame((byte*)&disk_status[device_index], sizeof(disk_status_t));
 }
 
 static bool send_printer_status_frame(void)
@@ -227,30 +234,31 @@ static bool send_printer_status_frame(void)
 static void send_ack(void)
 {
   Serial1.write(ACK);
-//  Serial.println("DBG: \'A\'");
 }
 
 static void send_nak(void)
 {
   Serial1.write(NAK);
-//  Serial.println("DBG: \'N\'");
 }
 
 static void send_error(void)
 {
   Serial1.write(ERR);
-//  Serial.println("DBG: \'E\'");
 }
 
 static void send_complete(void)
 {
   Serial1.write(COMPLETE);
-//  Serial.println("DBG: \'C\'");
 }
 
-static void clear_disk_status_flags(void)
+static void set_disk_status_flag(const byte device_index, const byte flag)
 {
-  disk_status[0].flags = DISK_SF_MOTOR_ON;	// TODO: parameter in: disk #
+ disk_status[device_index].flags |= flag;
+}
+
+static void clear_disk_status_flags(const byte device_index)
+{
+  disk_status[device_index].flags = DISK_SF_MOTOR_ON;
 }
 
 static void clear_printer_status_flags(void)
@@ -263,21 +271,10 @@ static void set_printer_aux2(const byte aux2)
   printer_status.prev_aux2 = aux2;
 }
 
-static bool is_write_protected(void)
+static bool is_write_protected(const byte device_index)
 {
-  return (DISK_SF_WRITE_PROT == (disk_status[0].flags & DISK_SF_WRITE_PROT));
+  return (DISK_SF_WRITE_PROT == (disk_status[device_index].flags & DISK_SF_WRITE_PROT));
 }
-#if 0
-// This function is suggested by Nick Gammon (http://forum.arduino.cc/index.php?topic=151014.msg1134308#msg1134308)
-static void wait_tx_hw_empty(void)
-{
-  while (!(UCSR1A & (1 << UDRE1))) {  // Wait for empty transmit buffer
-    UCSR1A |= 1 << TXC1;             // mark transmission not complete
-  }
-  while (!(UCSR1A & (1 << TXC1)))
-  {}                                // Wait for the transmission to complete
-}
-#endif
 
 static unsigned int auxs_to_sector(const byte aux1, const byte aux2)
 {
@@ -344,13 +341,10 @@ dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- COMPLETE"));
       set_printer_aux2(aux2);
       break;
     default : // REFACTORE WITH DISK 
-      Serial.print("DBG: UNKNOWN COMMAND_ID: ");
-      Serial.print(cmdid);
-      Serial.print(" AUX1: ");
-      Serial.print(aux1);
-      Serial.print(" AUX2: ");
-      Serial.println(aux2);
-      printer_status.flags |= PRINTER_SF_INV_CMD_FRAME;
+      dbg_print_txt(String("DBG: UNKNOWN COMMAND_ID. CMD PKT WAS:"));
+      dbg_print_bin(&sio_buffer[0u], CMD_FRAME_LEN + 1u);
+      printer_status.flags |= PRINTER_SF_INV_CMD_FRAME;	// TODO: set printer_status_flag
+      t_delay(T2);
       send_nak();
   }
 }
@@ -358,13 +352,14 @@ dbg_print_txt(String("SIO_PRINTER_PUT_LINE --- COMPLETE"));
 //
 // DISK COMMANDS
 //
-static void parse_disk_command(const byte cmdid, const byte aux1, const byte aux2) {
+static void parse_disk_command(const byte devid, const byte cmdid, const byte aux1, const byte aux2) {
   const unsigned int sector = auxs_to_sector(aux1, aux2) - 1u;
+  const byte device_index = devid_to_device_index(devid);
   switch (cmdid) {
     case SIO_DISK_FORMAT :
       t_delay(T2);
       send_ack();
-      if (is_write_protected()) {
+      if (is_write_protected(device_index)) {
         send_error();
       } else {
         send_complete();   // TODO
@@ -376,8 +371,8 @@ dbg_print_txt(String("SIO_DISK_GET_STATUS --- ENTERED"));
       send_ack();
       t_delay(T5);
       send_complete();
-      send_disk_status_frame();
-      clear_disk_status_flags();
+      send_disk_status_frame(device_index);
+      clear_disk_status_flags(device_index);
 dbg_print_txt(String("SIO_DISK_GET_STATUS --- COMPLETE"));
       break;
     case SIO_DISK_PUT_SECTOR :
@@ -393,32 +388,31 @@ dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ACK CMDFRM"));
             send_ack();
 dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ACK DATFRM"));
             //                          if not ok write_sector(sector, &buffer[0], SECTOR_LEN - 1);   ---> ERR! / otherwise COMPLETE
-            Serial.write(DEVID_D1);
+            Serial.write(devid);
             Serial.write(cmdid);
             Serial.write(aux1);
             Serial.write(aux2);
-            Serial.write(&sio_buffer[0], SECTOR_LEN);
+            Serial.write(&sio_buffer[0u], SECTOR_LEN);
 dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- DATA SENT"));
-            t_delay(5);
+            t_delay(5u);	// CHECK IF 5u of T5?
             if(Serial.read() == 'E') {
                send_error();
 dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- ERROR SENT"));
-
             } else {			// assume we received 'C' -- TODO: make explicit test
               send_complete();
 dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- COMPLETE"));
             }
           } else {
+            set_disk_status_flag(device_index, DISK_SF_INV_DATA_FRAME);
             t_delay(T4);
             send_nak();
 dbg_print_txt(String("SIO_DISK_PUT_SECTOR(_VERIFY) --- NACK"));
           }
         }
       } else {
-        disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
+        set_disk_status_flag(device_index, DISK_SF_INV_CMD_FRAME);
         send_nak();
       }
-dbg_print_txt(String("SIO_DISK_PUT_SECTOR --- COMPLETE"));
       break;
     case SIO_DISK_GET_SECTOR :
 dbg_print_txt(String("SIO_DISK_GET_SECTOR --- ENTERED"));
@@ -427,27 +421,23 @@ dbg_print_txt(String("SIO_DISK_GET_SECTOR --- ENTERED"));
         send_ack();
         t_delay(T5);
         send_complete();
-        t_delay(5); // hack to test whether Atari is too slow to receive data immediately after 'C'
-        Serial.write(DEVID_D1);
+        t_delay(5u); // hack to test whether Atari is too slow to receive data immediately after 'C'
+        Serial.write(devid);
         Serial.write(cmdid);
         Serial.write(aux1);
         Serial.write(aux2);
-        Serial.readBytes((char*)&sio_buffer[0], SECTOR_LEN);
+        Serial.readBytes((char*)&sio_buffer[0u], SECTOR_LEN);
         send_sector();
       } else {
-        disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
+        set_disk_status_flag(device_index, DISK_SF_INV_CMD_FRAME);
         send_nak();
       }
 dbg_print_txt(String("SIO_DISK_GET_SECTOR --- COMPLETE"));
       break;
-    default :    // REFACTORE!
-      Serial.print("DBG: UNKNOWN COMMAND_ID: ");
-      Serial.print(cmdid);
-      Serial.print(" AUX1: ");
-      Serial.print(aux1);
-      Serial.print(" AUX2: ");
-      Serial.println(aux2);
-      disk_status[0].flags |= DISK_SF_INV_CMD_FRAME;
+    default :
+      dbg_print_txt(String("DBG: UNKNOWN COMMAND_ID. CMD PKT WAS:"));
+      dbg_print_bin(&sio_buffer[0u], CMD_FRAME_LEN + 1u);
+      set_disk_status_flag(device_index, DISK_SF_INV_CMD_FRAME);
       t_delay(T2);
       send_nak();
   }
@@ -465,7 +455,7 @@ static void parse_cmd_frame(void)
 
   if (check_cmd_frame()) {
     if(DEVID_D1 <= devid && devid <= max_diskid) {
-        parse_disk_command(cmdid, aux1, aux2);
+        parse_disk_command(devid, cmdid, aux1, aux2);
     } else if(DEVID_P1 == devid) {
         parse_printer_command(cmdid, aux1, aux2);
     } else {

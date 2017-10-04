@@ -140,6 +140,7 @@ def handle_disk(port, open_files, command_frame):
 	cmdid = ord(command_frame[1])
 
 	if image_file_index < len(open_files) :
+		print 'image_file_index = ' + str(image_file_index)
 		if cmdid == DISK_GET_STATUS :
 			disk_get_status(command_frame)
 		elif cmdid == DISK_GET_SECTOR :
@@ -189,11 +190,12 @@ def handle_printer(port, command_frame):
 # TODO: need to have connection reinitialization - close, reopen?
 # at least error detection, when connection is lost
 def eventloop(port, open_files) :
+	max_devid = DEVID_D1 + len(open_files) - 1
 	try:
 		while True:
 			command_frame = port.read(COMMAND_FRAME_LEN)
 			devid = ord(command_frame[0])
-			if devid == DEVID_D1:
+			if devid >= DEVID_D1 and devid < max_devid :
 				handle_disk(port, open_files, command_frame)
 			elif devid == DEVID_P1:
 				handle_printer(port, command_frame)
